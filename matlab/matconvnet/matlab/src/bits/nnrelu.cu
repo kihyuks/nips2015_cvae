@@ -1,0 +1,85 @@
+// @file nnrelu.cu
+// @brief Relu non-linearity implementation (fast computation)
+// @author Xinchen Yan
+// Created by Xinchen Yan, Apr. 23, 2015
+
+#include "nnrelu.hpp"
+#include "impl/relu.hpp"
+
+#if ENABLE_GPU
+#include "datacu.hpp"
+#endif
+
+//TODO: enable cudnn??
+
+#include <assert.h>
+
+using namespace vl ;
+
+/* nnrelu_forward */
+
+Error
+vl::nnrelu_forward(vl::Context& context,
+                   vl::Tensor output,
+                   vl::Tensor data)
+{
+  Error status = vlSuccess;
+  switch (output.getMemoryType()) {
+    default:
+      assert(false);
+      return vl::vlErrorUnknown;
+    case vl::CPU:
+      status = vl::impl::relu_forward<CPU, float>
+      ((float*)output.getMemory(), (float const*)data.getMemory(),
+       data.getHeight(), data.getWidth(), data.getDepth() * data.getSize());
+      break;
+
+#ifdef ENABLE_GPU
+    case vl::GPU:
+      status = vl::impl::relu_forward<GPU, float>
+      ((float*)output.getMemory(), (float const*)data.getMemory(),
+       data.getHeight(), data.getWidth(), data.getDepth() * data.getSize());
+      
+      if (status == vlErrorCuda) {
+        context.setError(context.getCudaHelper().catchCudaError("relu_forward")) ;
+      }
+      break;
+      
+#endif 
+  }
+  return context.passError(status, "nnrelu_forward: ") ;
+}
+
+/* nnrelu_backward */
+Error
+vl::nnrelu_backward(vl::Context& context,
+                    vl::Tensor derData,
+                    vl::Tensor data,
+                    vl::Tensor derOutput)
+{
+  vl::Error status = vlSuccess ;
+  switch (derData.getMemoryType()) {
+    default:
+      assert(false) ;
+      return vl::vlErrorUnknown;
+    case vl::CPU:
+      status = vl::impl::relu_backward<CPU, float>
+      ((float*)derData.getMemory(), (float const*)data.getMemory(), (float const*)derOutput.getMemory(), 
+       derData.getHeight(), derData.getWidth(), derData.getDepth() * derData.getSize());
+      break;
+
+#if ENABLE_GPU
+    case vl::GPU:
+      status = vl::impl::relu_backward<GPU, float>
+      ((float*)derData.getMemory(), (float const*)data.getMemory(), (float const*)derOutput.getMemory(),
+       derData.getHeight(), derData.getWidth(), derData.getDepth() * derData.getSize());
+
+      if (status == vlErrorCuda) {
+        context.setError(context.getCudaHelper().catchCudaError("relu_backward: ")) ;
+      }
+      break;
+#endif
+  }
+  return context.passError(status, "nnrelu_backward: ") ;
+}
+
